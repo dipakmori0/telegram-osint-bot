@@ -1,6 +1,7 @@
 import os
 import sqlite3
 from datetime import datetime
+import requests
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -19,7 +20,6 @@ OWNER_CONTACT = "@HIDANCODE"
 
 LEAK_API_URL = "https://leakosintapi.com/"
 LEAK_API_KEY = "7658050410:qQ88TxXl"
-VEHICLE_API_BASE = "https://vehicleinfo.zerovault.workers.dev/?VIN="
 
 DB_PATH = "botdata.db"
 
@@ -53,16 +53,6 @@ CREATE TABLE IF NOT EXISTS logs(
 );
 """)
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS codes(
-  code TEXT PRIMARY KEY,
-  credits INTEGER,
-  used INTEGER DEFAULT 0,
-  created_by INTEGER,
-  created_at TEXT
-);
-""")
-
 conn.commit()
 
 # ===== HELPERS =====
@@ -78,7 +68,6 @@ def create_user(uid, username, referred_by=None):
     c.execute("INSERT INTO users(user_id, username, credits, referred_by, referrals_count, banned, created_at) VALUES(?,?,?,?,?,?,?)",
               (uid, username, NEW_USER_CREDITS, referred_by, 0, 0, now))
     conn.commit()
-    # Referral bonus
     if referred_by and referred_by != uid and get_user(referred_by):
         c.execute("UPDATE users SET credits = credits + ?, referrals_count = referrals_count + 1 WHERE user_id=?",
                   (REFERRAL_BONUS, referred_by))
@@ -126,13 +115,15 @@ def join_kb():
     kb.add(InlineKeyboardButton("✅ I have Joined (Verify)", callback_data="verify"))
     return kb
 
+def is_admin(uid):
+    return uid == OWNER_ID
+
 # ===== START COMMAND =====
 @bot.message_handler(commands=["start"])
 def cmd_start(m):
     uid = m.from_user.id
     uname = m.from_user.username or m.from_user.first_name or ""
     
-    # Referral
     ref = None
     parts = m.text.split(" ", 1)
     if len(parts) > 1 and parts[1].startswith("ref_"):
@@ -151,7 +142,6 @@ def cmd_start(m):
         bot.reply_to(m, "🔒 You must join the channels first:", reply_markup=join_kb())
         return
     
-    # Welcome + Instructions
     welcome_msg = f"""
 👋 Hello {m.from_user.first_name}!
 💳 Your Credits: {u['credits']}
@@ -194,9 +184,66 @@ def cmd_num(m):
     if not deduct_credit(uid, 1):
         bot.reply_to(m, "❌ You don't have enough credits.")
         return
-    # Example: call your API here (replace with real API)
-    response = f"📞 Number info for {number}:\n- SIM Info: Example\n- Operator: Example\n- Region: Example"
+
+    try:
+        res = requests.get(f"{LEAK_API_URL}?number={number}&key={LEAK_API_KEY}")
+        data = res.json()
+        sim_info = data.get("sim", "N/A")
+        operator = data.get("operator", "N/A")
+        region = data.get("region", "N/A")
+        response = f"📞 Number info for {number}:\n- SIM Info: {sim_info}\n- Operator: {operator}\n- Region: {region}"
+    except Exception as e:
+        response = f"❌ Failed to fetch number info: {str(e)}"
+
     bot.reply_to(m, response)
+
+# ===== ADMIN COMMANDS =====
+@bot.message_handler(commands=["addcredits"])
+def cmd_addcredits(m):
+    uid = m.from_user.id
+    if not is_admin(uid):
+        bot.reply_to(m, "❌ You are not authorized.")
+        return
+    parts = m.text.split()
+    if len(parts) != 3:
+        bot.reply_to(m, "Usage: /addcredits <user_id> <amount>")
+        return
+    try:
+        target_uid = int(parts[1])
+        amount = int(parts[2])
+        add_credits(target_uid, amount)
+        bot.reply_to(m, f"✅ Added {amount} credits to {target_uid}")
+    except:
+        bot.reply_to(m, "❌ Invalid input.")
+
+@bot.message_handler(commands=["ban"])
+def cmd_ban(m):
+    uid = m.from_user.id
+    if not is_admin(uid):
+        bot.reply_to(m, "❌ You are not authorized.")
+        return
+    parts = m.text.split()
+    if len(parts) != 2:
+        bot.reply_to(m, "Usage: /ban <user_id>")
+        return
+    try:
+        target_uid = int(parts[1])
+        c.execute("UPDATE users SET banned=1 WHERE user_id=?", (target_uid,))
+        conn.commit()
+        bot.reply_to(m, f"🚫 User {target_uid} has been banned.")
+    except:
+        bot.reply_to(m, "❌ Invalid input.")
+
+@bot.message_handler(commands=["logs"])
+def cmd_logs(m):
+    uid = m.from_user.id
+    if not is_admin(uid):
+        bot.reply_to(m, "❌ You are not authorized.")
+        return
+    c.execute("SELECT * FROM logs ORDER BY id DESC LIMIT 10")
+    logs = c.fetchall()
+    msg = "📝 Last 10 logs:\n\n" + "\n".join([f"{l[0]} | User {l[1]} | {l[2]} | {l[3]}" for l in logs])
+    bot.reply_to(m, msg)
 
 # ===== VERIFY CALLBACK =====
 @bot.callback_query_handler(func=lambda call: call.data == "verify")
@@ -209,4 +256,6 @@ def cb_verify(call):
         bot.answer_callback_query(call.id, "❌ Not verified. Join both channels.", show_alert=True)
 
 # ===== RUN BOT =====
-bot.infinity_polling()
+if __name__ == "__main__":
+    print("Bot is starting...")
+    bot.infinity_polling()
