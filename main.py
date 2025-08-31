@@ -1,8 +1,6 @@
 import os
 import sqlite3
-import time
 from datetime import datetime
-import requests
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -133,21 +131,72 @@ def join_kb():
 def cmd_start(m):
     uid = m.from_user.id
     uname = m.from_user.username or m.from_user.first_name or ""
+    
     # Referral
     ref = None
     parts = m.text.split(" ", 1)
     if len(parts) > 1 and parts[1].startswith("ref_"):
-        try: ref = int(parts[1].replace("ref_", ""))
-        except: ref = None
+        try:
+            ref = int(parts[1].replace("ref_", ""))
+        except:
+            ref = None
+
     create_user(uid, uname, ref)
     u = get_user(uid)
     if u.get("banned"):
         bot.reply_to(m, "🚫 You are banned. Contact owner.")
         return
+
     if not is_verified(uid):
-        bot.reply_to(m, "🔒 Join channels first", reply_markup=join_kb())
+        bot.reply_to(m, "🔒 You must join the channels first:", reply_markup=join_kb())
         return
-    bot.reply_to(m, f"👋 Hello {m.from_user.first_name}!\n💳 Credits: {u['credits']}")
+    
+    # Welcome + Instructions
+    welcome_msg = f"""
+👋 Hello {m.from_user.first_name}!
+💳 Your Credits: {u['credits']}
+
+📌 How to use this bot:
+1. To check a number: `/num <phone_number>`
+2. To get your credits: `/credits`
+3. For help or contact: {OWNER_CONTACT}
+
+🔗 Make sure you stay joined in both channels.
+"""
+    bot.reply_to(m, welcome_msg, parse_mode="Markdown")
+
+# ===== CREDITS COMMAND =====
+@bot.message_handler(commands=["credits"])
+def cmd_credits(m):
+    uid = m.from_user.id
+    u = get_user(uid)
+    if not u:
+        bot.reply_to(m, "User not found. Use /start first.")
+        return
+    bot.reply_to(m, f"💳 You have {u['credits']} credits.")
+
+# ===== NUMBER COMMAND =====
+@bot.message_handler(commands=["num"])
+def cmd_num(m):
+    uid = m.from_user.id
+    u = get_user(uid)
+    if not u:
+        bot.reply_to(m, "❌ Use /start first to register.")
+        return
+    if not is_verified(uid):
+        bot.reply_to(m, "🔒 You must join the channels first.", reply_markup=join_kb())
+        return
+    parts = m.text.split(" ", 1)
+    if len(parts) < 2:
+        bot.reply_to(m, "❌ Usage: /num <phone_number>")
+        return
+    number = parts[1].strip()
+    if not deduct_credit(uid, 1):
+        bot.reply_to(m, "❌ You don't have enough credits.")
+        return
+    # Example: call your API here (replace with real API)
+    response = f"📞 Number info for {number}:\n- SIM Info: Example\n- Operator: Example\n- Region: Example"
+    bot.reply_to(m, response)
 
 # ===== VERIFY CALLBACK =====
 @bot.callback_query_handler(func=lambda call: call.data == "verify")
