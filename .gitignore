@@ -1,0 +1,4 @@
+# Ignore environment files and database
+.env
+botdata.db
+__pycache__/
