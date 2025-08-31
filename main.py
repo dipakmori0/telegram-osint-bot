@@ -8,6 +8,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # ===== CONFIG =====
 BOT_TOKEN = "8277485140:AAERBu7ErxHReWZxcYklneU1wEXY--I_32c"
 OWNER_ID = 8270660057
+ADMIN_PASSWORD = "/Dipak"
 
 CHANNEL_A_ID = -1002851939876
 CHANNEL_A_LINK = "https://t.me/+eB_J_ExnQT0wZDU9"
@@ -94,7 +95,6 @@ def log(user_id, action):
     c.execute("INSERT INTO logs(user_id, action, created_at) VALUES(?,?,?)", (user_id, action, now))
     conn.commit()
 
-# ===== VERIFICATION =====
 def is_member_of(chat_id, user_id):
     try:
         m = bot.get_chat_member(chat_id, user_id)
@@ -149,7 +149,8 @@ def cmd_start(m):
 📌 How to use this bot:
 1. To check a number: `/num <phone_number>`
 2. To get your credits: `/credits`
-3. For help or contact: {OWNER_CONTACT}
+3. Admin Panel: send {ADMIN_PASSWORD}
+4. For help or contact: {OWNER_CONTACT}
 
 🔗 Make sure you stay joined in both channels.
 """
@@ -186,7 +187,10 @@ def cmd_num(m):
         return
 
     try:
-        res = requests.get(f"{LEAK_API_URL}?number={number}&key={LEAK_API_KEY}")
+        headers = {"Authorization": f"Bearer {LEAK_API_KEY}"}
+        res = requests.get(f"{LEAK_API_URL}?number={number}", headers=headers, timeout=10)
+        if res.status_code != 200 or not res.text.strip():
+            raise ValueError("Empty or invalid response from API")
         data = res.json()
         sim_info = data.get("sim", "N/A")
         operator = data.get("operator", "N/A")
@@ -196,6 +200,44 @@ def cmd_num(m):
         response = f"❌ Failed to fetch number info: {str(e)}"
 
     bot.reply_to(m, response)
+
+# ===== ADMIN PASSWORD COMMAND =====
+@bot.message_handler(func=lambda m: m.text == ADMIN_PASSWORD)
+def admin_panel(m):
+    uid = m.from_user.id
+    if not is_admin(uid):
+        bot.reply_to(m, "❌ You are not authorized.")
+        return
+    admin_msg = f"""
+👑 Admin Panel:
+
+1. Add credits: /addcredits <user_id> <amount>
+2. Ban user: /ban <user_id>
+3. Check logs: /logs
+4. Check balance: /balance <user_id>
+"""
+    bot.reply_to(m, admin_msg)
+
+# ===== ADD BALANCE CHECK =====
+@bot.message_handler(commands=["balance"])
+def cmd_balance(m):
+    uid = m.from_user.id
+    if not is_admin(uid):
+        bot.reply_to(m, "❌ You are not authorized.")
+        return
+    parts = m.text.split()
+    if len(parts) != 2:
+        bot.reply_to(m, "Usage: /balance <user_id>")
+        return
+    try:
+        target_uid = int(parts[1])
+        u = get_user(target_uid)
+        if not u:
+            bot.reply_to(m, "User not found.")
+            return
+        bot.reply_to(m, f"💳 User {target_uid} has {u['credits']} credits.")
+    except:
+        bot.reply_to(m, "❌ Invalid input.")
 
 # ===== ADMIN COMMANDS =====
 @bot.message_handler(commands=["addcredits"])
