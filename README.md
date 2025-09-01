@@ -1,13 +1,11 @@
-# Telegram OSINT Bot
+# Baap Bot
 
-## Setup on Render
+This is a Telegram bot that provides:
+- Phone info lookup
+- Vehicle info lookup
+- Referral system
+- Clone your bot feature
 
-1. Set environment variables:
-- BOT_TOKEN
-- OWNER_ID
-- API_KEY
-- API_URL
-- RENDER_EXTERNAL_URL
-- PORT (default 5000)
-2. Deploy.
-3. Bot is ready with channel verification and admin panel.
+## Setup
+
+1. Clone the repo:
