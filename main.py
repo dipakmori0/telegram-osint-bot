@@ -2,7 +2,7 @@ import sqlite3
 import requests
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 
 # ===== CONFIG =====
 BOT_TOKEN = "8277485140:AAERBu7ErxHReWZxcYklneU1wEXY--I_32c"
@@ -54,8 +54,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📣 Join Channel 2", url=CHANNEL_B_LINK)]
     ])
     await update.message.reply_text(
-        f"👋 Hello {username}!\n💳 You have Unlimited credits\n\n"
-        "Please join both channels first.",
+        f"👋 Hello {username}!\n💳 You have Unlimited credits\n\nPlease join both channels first.",
         reply_markup=keyboard
     )
     await update.message.reply_text("👋 Choose an option:", reply_markup=main_menu_keyboard())
@@ -66,24 +65,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     if query.data == "owner":
         kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
-        await query.edit_message_text("👑 Bot Owner:\n👉 [@TASKBLIX](https://t.me/TASKBLIX)", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+        await query.edit_message_text(
+            "👑 Bot Owner:\n👉 [@TASKBLIX](https://t.me/TASKBLIX)",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
     elif query.data == "help":
         kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
         await query.edit_message_text(
-            "📖 Help Menu:\nUse /num <number/email/name> to search info.\nAdmin: /addcredit <userid> <amount>",
-            parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb)
+            "📖 Help Menu:\nUse direct number like `919023370810` to search info.\nAdmin: /addcredit <userid> <amount>",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
         )
     elif query.data == "legal":
         kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
         await query.edit_message_text(
             "⚖ Legal Disclaimer: For educational purposes only.",
-            parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb)
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
         )
     elif query.data == "search":
         kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
         await query.edit_message_text(
-            "🔍 Use direct number/email/name to search:\nExample: 919023370810",
-            parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb)
+            "🔍 Directly send a number to search info, example:\n`919023370810`",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
         )
     elif query.data == "mainmenu":
         await query.edit_message_text("👋 Choose an option:", reply_markup=main_menu_keyboard())
@@ -123,8 +129,6 @@ async def add_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Added {amount} credits to {target}")
 
 # ===== TELEGRAM WEBHOOK =====
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler
-
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("credits", credits))
@@ -142,4 +146,4 @@ def webhook():
 if __name__ == "__main__":
     # Set webhook manually once:
     print("Set Telegram webhook using:")
-    print(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url=https://<YOUR_RENDER_URL>/{BOT_TOKEN}")
+    print(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url=https://<YOUR_RENDER_OR_RAILWAY_URL>/{BOT_TOKEN}")
