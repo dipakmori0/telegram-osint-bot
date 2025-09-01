@@ -1,68 +1,39 @@
 import sqlite3
 import requests
-from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from flask import Flask, request
-import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 
 # ===== CONFIG =====
 BOT_TOKEN = "8277485140:AAERBu7ErxHReWZxcYklneU1wEXY--I_32c"
-OWNER_ID = 8270660057
-
 CHANNEL_A_ID = -1002851939876
 CHANNEL_A_LINK = "https://t.me/+eB_J_ExnQT0wZDU9"
-
 CHANNEL_B_ID = -1002321550721
 CHANNEL_B_LINK = "https://t.me/taskblixosint"
-
 API_KEY = "7658050410:qQ88TxXl"
 API_URL = "https://leakosintapi.com/"
-
-DB_PATH = "bot.db"
+OWNER_ID = 8270660057
 
 # ===== DATABASE =====
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+conn = sqlite3.connect("bot.db", check_same_thread=False)
 c = conn.cursor()
-c.execute("""CREATE TABLE IF NOT EXISTS users(
-    user_id INTEGER PRIMARY KEY,
-    username TEXT,
-    credits INTEGER DEFAULT -1,
-    banned INTEGER DEFAULT 0
-)""")
-c.execute("""CREATE TABLE IF NOT EXISTS logs(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    action TEXT,
-    created_at TEXT
-)""")
+c.execute("""CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                credits INTEGER DEFAULT -1
+            )""")
 conn.commit()
 
+# ===== BOT INIT =====
+bot = Bot(BOT_TOKEN)
+app = Flask(__name__)
+
 # ===== HELPERS =====
-def add_user(user_id, username):
+def add_user(user_id: int, username: str):
     c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
     if not c.fetchone():
-        c.execute("INSERT INTO users (user_id, username, credits) VALUES (?, ?, ?)", (user_id, username, -1))
+        c.execute("INSERT INTO users(user_id, username, credits) VALUES(?, ?, ?)", (user_id, username, -1))
         conn.commit()
-        return True
-    return False
-
-def log_action(user_id, action):
-    now = datetime.utcnow().isoformat()
-    c.execute("INSERT INTO logs(user_id, action, created_at) VALUES (?, ?, ?)", (user_id, action, now))
-    conn.commit()
-
-def is_admin(user_id):
-    return user_id == OWNER_ID
-
-def is_verified(user_id, bot):
-    try:
-        a = bot.get_chat_member(CHANNEL_A_ID, user_id)
-        b = bot.get_chat_member(CHANNEL_B_ID, user_id)
-        return a.status in ["member", "administrator", "creator"] and \
-               b.status in ["member", "administrator", "creator"]
-    except:
-        return False
 
 def main_menu_keyboard():
     return InlineKeyboardMarkup([
@@ -72,146 +43,103 @@ def main_menu_keyboard():
          InlineKeyboardButton("⚖ Legal", callback_data="legal")]
     ])
 
-def join_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 Join Channel 1", url=CHANNEL_A_LINK)],
-        [InlineKeyboardButton("📣 Join Channel 2", url=CHANNEL_B_LINK)],
-        [InlineKeyboardButton("✅ I have joined", callback_data="verify")]
-    ])
-
-def fetch_info(query: str) -> str:
-    try:
-        payload = {"token": API_KEY, "request": query, "limit": 100, "lang": "en"}
-        res = requests.post(API_URL, json=payload, timeout=30)
-        data = res.json()
-        result_text = f"🔍 Lookup result for {query}:\n\n"
-        if "List" in data:
-            for source, source_data in data["List"].items():
-                result_text += f"📂 Source: {source}\n"
-                if "Data" in source_data:
-                    for entry in source_data["Data"]:
-                        for key, value in entry.items():
-                            if value:
-                                k = key.lower()
-                                if k.startswith("phone"):
-                                    result_text += f"📞 Phone: {value}\n"
-                                elif k.startswith("address"):
-                                    result_text += f"🏘️ Address: {value}\n"
-                                elif k in ["fullname","full_name"]:
-                                    result_text += f"👤 Full Name: {value}\n"
-                                elif k in ["fathername","father_name"]:
-                                    result_text += f"👨 Father: {value}\n"
-                                elif k in ["docnumber","document"]:
-                                    result_text += f"🃏 Document: {value}\n"
-                                elif k in ["login","username","nick"]:
-                                    result_text += f"🏷️ Login: {value}\n"
-                                elif k=="region":
-                                    result_text += f"🗺️ Region: {value}\n"
-                        result_text += "\n"
-        else:
-            result_text += str(data)
-    except Exception as e:
-        result_text = f"⚠ API Error: {e}"
-    result_text += "\n💳 Credits: Unlimited\n⚠ For educational purposes only"
-    return result_text
-
-# ===== COMMANDS =====
+# ===== START =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    uname = update.effective_user.username or update.effective_user.first_name
-    add_user(uid, uname)
-    log_action(uid, "start")
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    add_user(user_id, username)
 
-    if not is_verified(uid, context.bot):
-        await update.message.reply_text("🔒 Please join both channels first:", reply_markup=join_kb())
-        return
-
-    msg = (
-        f"👋 Hello {uname}!\n\n"
-        "📌 How to use:\n"
-        "• Send a number/email/name directly, e.g., `919023370810`\n"
-        "• Check credits: /credits\n"
-        "• Admin commands for owner\n\n"
-        "⚡ Unlimited credits"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Join Channel 1", url=CHANNEL_A_LINK)],
+        [InlineKeyboardButton("📣 Join Channel 2", url=CHANNEL_B_LINK)]
+    ])
+    await update.message.reply_text(
+        f"👋 Hello {username}!\n💳 You have Unlimited credits\n\n"
+        "Please join both channels first.",
+        reply_markup=keyboard
     )
-    await update.message.reply_text(msg, reply_markup=main_menu_keyboard())
+    await update.message.reply_text("👋 Choose an option:", reply_markup=main_menu_keyboard())
 
-async def credits(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💳 You have Unlimited credits.")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    log_action(update.effective_user.id, f"direct {text}")
-    await update.message.reply_text(fetch_info(text))
-
-# ===== CALLBACK HANDLER =====
+# ===== MENU BUTTON =====
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    data = query.data
-    kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
-    if data=="owner":
-        await query.edit_message_text("👑 Bot Owner: [@TASKBLIX](https://t.me/TASKBLIX)", reply_markup=InlineKeyboardMarkup(kb))
-    elif data=="help":
-        await query.edit_message_text("📖 Help:\nSend number/email/name to lookup", reply_markup=InlineKeyboardMarkup(kb))
-    elif data=="legal":
-        await query.edit_message_text("⚖ Legal Disclaimer\nFor educational purposes only", reply_markup=InlineKeyboardMarkup(kb))
-    elif data=="search":
-        await query.edit_message_text("🔍 Send number/email/name directly", reply_markup=InlineKeyboardMarkup(kb))
-    elif data=="verify":
-        if is_verified(query.from_user.id, context.bot):
-            await query.edit_message_text("✅ Verified! You can now use the bot.")
-        else:
-            await query.answer("❌ Not verified. Join both channels.", show_alert=True)
-    elif data=="mainmenu":
+    if query.data == "owner":
+        kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
+        await query.edit_message_text("👑 Bot Owner:\n👉 [@TASKBLIX](https://t.me/TASKBLIX)", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+    elif query.data == "help":
+        kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
+        await query.edit_message_text(
+            "📖 Help Menu:\nUse /num <number/email/name> to search info.\nAdmin: /addcredit <userid> <amount>",
+            parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb)
+        )
+    elif query.data == "legal":
+        kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
+        await query.edit_message_text(
+            "⚖ Legal Disclaimer: For educational purposes only.",
+            parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb)
+        )
+    elif query.data == "search":
+        kb = [[InlineKeyboardButton("↩ Back", callback_data="mainmenu")]]
+        await query.edit_message_text(
+            "🔍 Use direct number/email/name to search:\nExample: 919023370810",
+            parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb)
+        )
+    elif query.data == "mainmenu":
         await query.edit_message_text("👋 Choose an option:", reply_markup=main_menu_keyboard())
+
+# ===== CREDITS =====
+async def credits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("💳 You have Unlimited credits.")
+
+# ===== NUM LOOKUP =====
+async def num_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.message.text.strip()
+    try:
+        headers = {"Authorization": f"Bearer {API_KEY}"}
+        res = requests.get(f"{API_URL}?number={query}", headers=headers, timeout=10)
+        data = res.json()
+        sim_info = data.get("sim", "N/A")
+        operator = data.get("operator", "N/A")
+        region = data.get("region", "N/A")
+        response = f"📞 Number info for {query}:\n- SIM Info: {sim_info}\n- Operator: {operator}\n- Region: {region}"
+    except Exception as e:
+        response = f"❌ Failed: {str(e)}"
+    await update.message.reply_text(response)
 
 # ===== ADMIN =====
 async def add_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if not is_admin(uid):
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
         await update.message.reply_text("❌ Not authorized")
         return
-    if len(context.args) < 2:
-        await update.message.reply_text("❌ Usage: /addcredit <user_id> <amount>")
+    args = context.args
+    if len(args) != 2:
+        await update.message.reply_text("Usage: /addcredit <userid> <amount>")
         return
-    try:
-        target = int(context.args[0])
-        amount = int(context.args[1])
-        c.execute("UPDATE users SET credits=credits+? WHERE user_id=?", (amount, target))
-        conn.commit()
-        log_action(uid, f"addcredit {amount} to {target}")
-        await update.message.reply_text(f"✅ Added {amount} credits to {target}")
-    except Exception as e:
-        await update.message.reply_text(f"⚠ Error: {e}")
+    target, amount = int(args[0]), int(args[1])
+    c.execute("UPDATE users SET credits = credits + ? WHERE user_id=?", (amount, target))
+    conn.commit()
+    await update.message.reply_text(f"✅ Added {amount} credits to {target}")
 
-# ===== WEBHOOK RUN =====
-def main():
-    app = Flask(__name__)
-    bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
+# ===== TELEGRAM WEBHOOK =====
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CommandHandler("credits", credits))
-    bot_app.add_handler(CommandHandler("addcredit", add_credit))
-    bot_app.add_handler(CallbackQueryHandler(button_handler))
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("credits", credits))
+application.add_handler(CommandHandler("addcredit", add_credit))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, num_lookup))
+application.add_handler(CallbackQueryHandler(button_handler))
 
-    @app.route(f"/{BOT_TOKEN}", methods=["POST"])
-    def webhook():
-        from telegram import Update
-        update = Update.de_json(request.get_json(force=True), bot_app.bot)
-        bot_app.update_queue.put(update)
-        return "ok"
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    application.bot.process_new_updates([update])
+    return "OK", 200
 
-    @app.route("/")
-    def index():
-        return "Bot is running..."
-
-    url = os.environ.get("RENDER_EXTERNAL_URL")
-    if url:
-        bot_app.bot.set_webhook(f"{url}/{BOT_TOKEN}")
-
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
+# ===== RUN =====
 if __name__ == "__main__":
-    main()
+    # Set webhook manually once:
+    print("Set Telegram webhook using:")
+    print(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url=https://<YOUR_RENDER_URL>/{BOT_TOKEN}")
