@@ -1,4 +1,4 @@
-*.pyc
 __pycache__/
-bot.db
+*.pyc
+users.db
 .env
