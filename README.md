@@ -1,22 +1,13 @@
-# telegram-osint-bot
 # Telegram OSINT Bot
 
-## Setup
+## Setup on Render
 
-1. Upload files to GitHub.
-2. Add environment variables in Render:
-   - BOT_TOKEN
-   - OWNER_ID
-   - CHANNEL_A_ID
-   - CHANNEL_A_LINK
-   - CHANNEL_B_USERNAME
-   - CHANNEL_B_LINK
-   - NEW_USER_CREDITS
-   - REFERRAL_BONUS
-   - OWNER_CONTACT
-   - LEAK_API_URL
-   - LEAK_API_KEY
-   - VEHICLE_API_BASE
-   - DB_PATH
-3. Build Command: `pip install -r requirements.txt`
-4. Start Command: `python main.py`
+1. Set environment variables:
+- BOT_TOKEN
+- OWNER_ID
+- API_KEY
+- API_URL
+- RENDER_EXTERNAL_URL
+- PORT (default 5000)
+2. Deploy.
+3. Bot is ready with channel verification and admin panel.
